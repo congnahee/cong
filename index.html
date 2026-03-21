@@ -1013,10 +1013,12 @@ input[type=color]{width:25px;height:25px;border-radius:50%;border:2px solid var(
 
 <script>
 window.onerror = function(msg, src, line, col, err) {
-  // 외부 스크립트(Google Fonts 등) 에러는 무시
   if (line === 0 && col === 0) return true;
-  if (src && !src.includes(location.hostname)) return true;
-  console.warn('App error:', msg, 'line:', line);
+  const div = document.getElementById('_dbg') || document.createElement('div');
+  div.id = '_dbg';
+  div.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#8B0000;color:#fff;padding:8px;font-size:11px;z-index:99999;word-break:break-all';
+  div.textContent = `❌ ${msg} | line:${line} | ${src?.split('/').pop()||''}`;
+  document.body.appendChild(div);
   return true;
 };
 /* ════════════════════════════════════

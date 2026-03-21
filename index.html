@@ -1060,7 +1060,6 @@ function saveHistory() {
   const snap = {
     bgColor, bgOffX, bgOffY, bgScale, currentFilter,
     bgImgUrl: imgToDataUrl(bgImg),
-    bgOverlayImgUrl: imgToDataUrl(bgOverlayImg),
     _bright, _contrast, _sat, _bgOp, _bgBlur,
     _fBright, _fCont, _fSat, _fTemp, _vig, _grain,
     layers: JSON.parse(JSON.stringify(layers.map(l => { const c = {...l}; delete c.srcImg; return c; })))
@@ -1077,10 +1076,7 @@ function applySnap(snap) {
   selId = null;
   dataUrlToImg(snap.bgImgUrl, img => {
     bgImg = img;
-    dataUrlToImg(snap.bgOverlayImgUrl, img2 => {
-      bgOverlayImg = img2;
-      refreshLayerList(); renderProps(); render();
-    });
+    refreshLayerList(); renderProps(); render();
   });
 }
 function undoCanvas() {

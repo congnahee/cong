@@ -1041,7 +1041,7 @@ let bgOffX = 0, bgOffY = 0;   // offset in canvas-fraction units (-1 ~ 1)
 let bgScale = 100;             // % scale (100 = cover fit)
 let bgMode = 'move';           // 'move' | 'layer'  — which thing canvas drag affects
 
-// ③ undo/redo history
+// ③ undo/redo history (최대 40단계)
 let undoStack = [], redoStack = [];
 function imgToDataUrl(img) {
   if (!img) return null;
@@ -1057,27 +1057,31 @@ function dataUrlToImg(url, cb) {
   const img = new Image(); img.onload=()=>cb(img); img.onerror=()=>cb(null); img.src=url;
 }
 function saveHistory() {
-  const snap = {
-    bgColor, bgOffX, bgOffY, bgScale, currentFilter,
-    bgImgUrl: imgToDataUrl(bgImg),
-    _bright, _contrast, _sat, _bgOp, _bgBlur,
-    _fBright, _fCont, _fSat, _fTemp, _vig, _grain,
-    layers: JSON.parse(JSON.stringify(layers.map(l => { const c = {...l}; delete c.srcImg; return c; })))
-  };
-  undoStack.push(snap);
-  if (undoStack.length > 40) undoStack.shift();
-  redoStack = [];
+  try {
+    const snap = {
+      bgColor, bgOffX, bgOffY, bgScale, currentFilter,
+      bgImgUrl: imgToDataUrl(bgImg),
+      _bright, _contrast, _sat, _bgOp, _bgBlur,
+      _fBright, _fCont, _fSat, _fTemp, _vig, _grain,
+      layers: JSON.parse(JSON.stringify(layers.map(l => { const c = {...l}; delete c.srcImg; return c; })))
+    };
+    undoStack.push(snap);
+    if (undoStack.length > 40) undoStack.shift();
+    redoStack = [];
+  } catch(e) { console.warn('saveHistory 오류:', e.message); }
 }
 function applySnap(snap) {
-  bgColor = snap.bgColor; bgOffX = snap.bgOffX; bgOffY = snap.bgOffY; bgScale = snap.bgScale;
-  if (snap.currentFilter !== undefined) currentFilter = snap.currentFilter;
-  if (snap._bright !== undefined) { _bright=snap._bright; _contrast=snap._contrast; _sat=snap._sat; _bgOp=snap._bgOp; _bgBlur=snap._bgBlur; _fBright=snap._fBright; _fCont=snap._fCont; _fSat=snap._fSat; _fTemp=snap._fTemp; _vig=snap._vig; _grain=snap._grain; }
-  layers = snap.layers; calliCache = {};
-  selId = null;
-  dataUrlToImg(snap.bgImgUrl, img => {
-    bgImg = img;
-    refreshLayerList(); renderProps(); render();
-  });
+  try {
+    bgColor = snap.bgColor; bgOffX = snap.bgOffX; bgOffY = snap.bgOffY; bgScale = snap.bgScale;
+    if (snap.currentFilter !== undefined) currentFilter = snap.currentFilter;
+    if (snap._bright !== undefined) { _bright=snap._bright; _contrast=snap._contrast; _sat=snap._sat; _bgOp=snap._bgOp; _bgBlur=snap._bgBlur; _fBright=snap._fBright; _fCont=snap._fCont; _fSat=snap._fSat; _fTemp=snap._fTemp; _vig=snap._vig; _grain=snap._grain; }
+    layers = snap.layers; calliCache = {};
+    selId = null;
+    dataUrlToImg(snap.bgImgUrl, img => {
+      bgImg = img;
+      refreshLayerList(); renderProps(); render();
+    });
+  } catch(e) { console.warn('applySnap 오류:', e.message); }
 }
 function undoCanvas() {
   if (undoStack.length === 0) { showToast('더 이상 되돌릴 수 없어요'); return; }
@@ -1108,6 +1112,8 @@ const FILTERS = {
 };
 
 /* ── 픽셀 기반 이미지 필터 (Safari/iOS Canvas filter 미지원 대응) ── */
+/* 픽셀 직접 조작 필터 (Safari/iOS Canvas filter 미지원 대응)
+   getImageData를 사용하므로 CORS 오염 가능성 있음 — try-catch 필수 */
 function applyPixelFilter(ctx, W, H, bright, contrast, sat, filterName, blur, temp) {
   // 기본값이면 픽셀 처리 건너뜀
   if (bright===100 && contrast===100 && sat===100 && filterName==='none' && blur===0 && temp===0) return;
@@ -1505,17 +1511,18 @@ function onBgLoad(e) {
     r.onload = ev => {
       const img = new Image();
       img.onload = () => {
-        const id = Date.now() + Math.random();
-        const label = file.name.replace(/\.[^.]+$/, '').slice(0, 12);
-        bgPhotos.push({ id, label, dataUrl: ev.target.result, imgObj: img });
-        done++;
-        if (done === files.length) {
-          // 마지막 사진을 자동 적용
-          const last = bgPhotos[bgPhotos.length - 1];
-          applyBgPhoto(last);
-          renderBgPhotoGallery();
-          showToast(`${done}장 추가됨 ✓`);
-        }
+        try {
+          const id = Date.now() + Math.random();
+          const label = file.name.replace(/\.[^.]+$/, '').slice(0, 12);
+          bgPhotos.push({ id, label, dataUrl: ev.target.result, imgObj: img });
+          done++;
+          if (done === files.length) {
+            const last = bgPhotos[bgPhotos.length - 1];
+            applyBgPhoto(last);
+            renderBgPhotoGallery();
+            showToast(`${done}장 추가됨 ✓`);
+          }
+        } catch(err) { console.warn('onBgLoad:', err.message); }
       };
       img.src = ev.target.result;
     };
@@ -1779,15 +1786,16 @@ function onCalliLoad(e) {
   const r = new FileReader();
   r.onload = ev => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const id = ++idCtr;
-      layers.push({ id, type:'calli', name:f.name.replace(/\.[^.]+$/,''), srcImg:img, size:Math.round(mc.width*.7), scaleX:100, scaleY:100, x:.5, y:.5, rotate:0, flipH:false, opacity:100, thresh:200, visible:true, tintColor:null });
-      selId = id;
-      processCalliLayer(id);
-      refreshLayerList(); renderProps(); render();
-      hideLoad(); showToast('PNG 오버레이 추가됨 ✓');
-      setTimeout(() => buildFilterThumbs('filterThumbGrid2'), 50);
+      try {
+        const id = ++idCtr;
+        layers.push({ id, type:'calli', name:f.name.replace(/\.[^.]+$/,''), srcImg:img, size:Math.round(mc.width*.7), scaleX:100, scaleY:100, x:.5, y:.5, rotate:0, flipH:false, opacity:100, thresh:200, visible:true, tintColor:null });
+        selId = id;
+        processCalliLayer(id);
+        refreshLayerList(); renderProps(); render();
+        hideLoad(); showToast('PNG 오버레이 추가됨 ✓');
+        setTimeout(() => buildFilterThumbs('filterThumbGrid2'), 50);
+      } catch(err) { hideLoad(); console.warn('onCalliLoad:', err.message); }
     };
     img.src = ev.target.result;
   };
@@ -2113,9 +2121,10 @@ function resetBgPos() {
 /* ════════════════════════════════════
    DRAG LAYERS ON CANVAS
 ════════════════════════════════════ */
-let drag=false, dsx,dsy,dlx,dly;
-let bgDrag=false, bdsx,bdsy,bdox,bdoy;
-let handleDrag=false, handleDragStartSize=0, handleDragStartX=0, handleDragStartY=0;
+// 드래그 상태 변수
+let drag=false, dsx,dsy,dlx,dly;           // 레이어 드래그
+let bgDrag=false, bdsx,bdsy,bdox,bdoy;     // 배경 드래그
+let handleDrag=false, handleDragStartSize=0, handleDragStartX=0, handleDragStartY=0, handleDragStartSX=100, handleDragStartSY=100; // 핸들 드래그
 let pinchStartDist=0, pinchStartSize=0, pinchTarget='layer'; // pinch zoom
 
 function getCanvasXY(e) {
@@ -2947,14 +2956,6 @@ function applyGradient(c1, c2, dir) {
   ctx2.fillStyle=gObj; ctx2.fillRect(0,0,sz,sz);
   const img=new Image(); img.onload=()=>{saveHistory();bgImg=img;bgOffX=0;bgOffY=0;bgScale=100;render();showToast('그라데이션 적용됨 ✓');};
   img.src=cv2.toDataURL();
-}
-
-function applyTextureBg(style) {
-  const sz=1000, cv3=document.createElement('canvas');
-  cv3.width=sz; cv3.height=sz;
-  drawTexture(cv3.getContext('2d'),style,sz);
-  const img=new Image(); img.onload=()=>{saveHistory();bgImg=img;bgOffX=0;bgOffY=0;bgScale=100;render();showToast('텍스처 배경 적용됨 ✓');};
-  img.src=cv3.toDataURL();
 }
 
 function drawTexture(ctx, style, size) {

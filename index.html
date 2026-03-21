@@ -586,7 +586,6 @@ input[type=color]{width:25px;height:25px;border-radius:50%;border:2px solid var(
       <div class="size-chip" data-w="1179" data-h="2556" onclick="setSize(this)">📱 아이폰</div>
       <div class="size-chip" data-w="1080" data-h="2340" onclick="setSize(this)">📱 갤럭시</div>
       <div class="size-chip" onclick="cropCanvas()" style="border-color:#C4973A;color:#C4973A">✂ 캔버스자르기</div>
-      <div class="size-chip" onclick="cropBg()" style="border-color:#5ba4d4;color:#5ba4d4">✂ 배경자르기</div>
       <div class="zoom-bar">
         <button class="zoom-btn" onclick="zoomCanvas(-1)" title="축소">－</button>
         <span class="zoom-pct" id="zoomPct">100%</span>
@@ -1062,9 +1061,11 @@ function dataUrlToImg(url, cb) {
 }
 function saveHistory() {
   try {
+    let bgImgUrl = null;
+    try { bgImgUrl = imgToDataUrl(bgImg); } catch(e) { bgImgUrl = currentBgDataUrl || null; }
     const snap = {
       bgColor, bgOffX, bgOffY, bgScale, currentFilter,
-      bgImgUrl: imgToDataUrl(bgImg),
+      bgImgUrl,
       _bright, _contrast, _sat, _bgOp, _bgBlur,
       _fBright, _fCont, _fSat, _fTemp, _vig, _grain,
       layers: JSON.parse(JSON.stringify(layers.map(l => { const c = {...l}; delete c.srcImg; return c; })))
@@ -1089,14 +1090,16 @@ function applySnap(snap) {
 }
 function undoCanvas() {
   if (undoStack.length === 0) { showToast('더 이상 되돌릴 수 없어요'); return; }
-  const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: imgToDataUrl(bgImg), _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
+  let _bgImgUrl1 = null; try { _bgImgUrl1 = imgToDataUrl(bgImg); } catch(e) { _bgImgUrl1 = currentBgDataUrl || null; }
+  const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: _bgImgUrl1, _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
   redoStack.push(cur);
   const snap = undoStack.pop();
   applySnap(snap); showToast('되돌리기 ↩');
 }
 function redoCanvas() {
   if (redoStack.length === 0) { showToast('더 이상 앞으로 갈 수 없어요'); return; }
-  const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: imgToDataUrl(bgImg), _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
+  let _bgImgUrl2 = null; try { _bgImgUrl2 = imgToDataUrl(bgImg); } catch(e) { _bgImgUrl2 = currentBgDataUrl || null; }
+  const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: _bgImgUrl2, _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
   undoStack.push(cur);
   const snap = redoStack.pop();
   applySnap(snap); showToast('앞으로가기 ↪');
@@ -1298,38 +1301,54 @@ function setSize(el) {
   showToast(`캔버스 크기: ${outputW}×${outputH}`);
 }
 
-/* ── 캔버스자르기: 전체 합성(배경+레이어) 현재 캔버스 크기로 자르기 ── */
+/* ── 캔버스자르기: 현재 캔버스 전체를 새 배경으로 합성 ── */
 function cropCanvas() {
   saveHistory();
-  // 현재 화면 전체를 새 배경이미지로 저장
-  const tmp = document.createElement('canvas');
-  tmp.width = outputW; tmp.height = outputH;
-  const tctx = tmp.getContext('2d');
-  // 배경색 먼저
-  tctx.fillStyle = bgColor || '#FFFFFF';
-  tctx.fillRect(0, 0, outputW, outputH);
-  // 현재 렌더 내용 복사
-  render(tctx, outputW, outputH);
-  const dataUrl = tmp.toDataURL('image/png');
-  const img = new Image();
-  img.onload = () => {
-    // 새 배경으로 설정하고 레이어 초기화
-    const id = Date.now();
-    bgPhotos.push({ id, label:'자르기', dataUrl, imgObj: img });
-    bgImg = img;
-    currentBgDataUrl = dataUrl;
-    activeBgPhotoId = id;
-    bgOffX = 0; bgOffY = 0; bgScale = 100;
-    layers = []; selId = null;
-    refreshLayerList(); renderProps();
-    renderBgPhotoGallery();
-    render();
-    // 골드 테두리 플래시
-    mc.style.outline = '3px solid #C4973A';
-    setTimeout(() => { mc.style.outline = ''; }, 800);
-    showToast('✂ 캔버스 자르기 완료');
+  // renderToBlob 방식으로 오염 없이 캡처
+  const doRenderClean = (cleanBgImg) => {
+    const tmp = document.createElement('canvas');
+    tmp.width = outputW; tmp.height = outputH;
+    const tctx = tmp.getContext('2d');
+    tctx.fillStyle = bgColor || '#FFFFFF';
+    tctx.fillRect(0, 0, outputW, outputH);
+    const origBgImg = bgImg;
+    if (cleanBgImg) bgImg = cleanBgImg;
+    render(tctx, outputW, outputH);
+    bgImg = origBgImg;
+    tmp.toBlob(blob => {
+      if (!blob) { showToast('자르기 실패'); return; }
+      const reader = new FileReader();
+      reader.onload = e => {
+        const dataUrl = e.target.result;
+        const img = new Image();
+        img.onload = () => {
+          const id = Date.now();
+          bgPhotos.push({ id, label:'자르기', dataUrl, imgObj: img });
+          bgImg = img;
+          currentBgDataUrl = dataUrl;
+          activeBgPhotoId = id;
+          bgOffX = 0; bgOffY = 0; bgScale = 100;
+          layers = []; selId = null;
+          refreshLayerList(); renderProps();
+          renderBgPhotoGallery();
+          render();
+          mc.style.outline = '3px solid #C4973A';
+          setTimeout(() => { mc.style.outline = ''; }, 800);
+          showToast('✂ 캔버스 자르기 완료');
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(blob);
+    }, 'image/png');
   };
-  img.src = dataUrl;
+  if (currentBgDataUrl && bgImg) {
+    const clean = new Image();
+    clean.onload = () => doRenderClean(clean);
+    clean.onerror = () => doRenderClean(null);
+    clean.src = currentBgDataUrl;
+  } else {
+    doRenderClean(null);
+  }
 }
 
 /* ── 배경자르기: 배경사진만 현재 크기로 자르기 (레이어 유지) ── */
@@ -1373,6 +1392,7 @@ window.addEventListener('resize', initCanvas);
    RENDER
 ════════════════════════════════════ */
 function render(targetCtx, TW, TH, transparent) {
+  try {
   const c = targetCtx || mctx;
   const W = TW || mc.width;
   const H = TH || mc.height;
@@ -1441,7 +1461,7 @@ function render(targetCtx, TW, TH, transparent) {
     c.drawImage(bgImg, dx, dy, bW, bH);
     c.filter = 'none';
     c.restore();
-    mc.style.filter = 'none';
+    if (!TW) mc.style.filter = 'none';
   }
 
 
@@ -1480,6 +1500,7 @@ function render(targetCtx, TW, TH, transparent) {
 
   // Empty hint
   $('canvasHint').style.display = (bgImg||layers.length>0)?'none':'flex';
+  } catch(e) { console.warn('render 오류:', e.message); }
 }
 
 function drawSelectionHandles(c, W, H, l) {
@@ -2654,6 +2675,15 @@ async function doCopy() {
    RESET
 ════════════════════════════════════ */
 function doResetAll() {
+  // 캔버스 크기 1:1 초기화
+  outputW=5000; outputH=5000; saveW=5000; saveH=5000;
+  document.querySelectorAll('.size-chip').forEach(c => c.classList.remove('active'));
+  const chip1 = document.querySelector('.size-chip[data-w="5000"]');
+  if (chip1) chip1.classList.add('active');
+  initCanvas();
+  const lbl = $('sizeLabel');
+  if (lbl) lbl.textContent = '5,000 × 5,000 px';
+
   bgImg=null; layers=[]; selId=null; idCtr=0;
   bgOffX=0; bgOffY=0; bgScale=100; bgMode='move';
   activeBgPhotoId=null; currentBgDataUrl=null; bgHidden=false;
@@ -3795,7 +3825,13 @@ document.addEventListener('touchmove', e => {
   }
 }, { passive: true });
 
-window.addEventListener('load', ()=>{ loadCustomData(); initCanvas(); render(); mc.style.cursor='grab'; buildGallery(); });
+window.addEventListener('load', ()=>{
+  try { loadCustomData(); } catch(e) { console.warn('loadCustomData:', e.message); }
+  try { initCanvas(); } catch(e) { console.warn('initCanvas:', e.message); }
+  try { render(); } catch(e) { console.warn('render:', e.message); }
+  mc.style.cursor='grab';
+  try { buildGallery(); } catch(e) { console.warn('buildGallery:', e.message); }
+});
 </script>
 </body>
 </html>

@@ -1335,7 +1335,7 @@ function render(targetCtx, TW, TH, transparent) {
   }
 
   // BG image — 픽셀 직접 조작 (Safari/iOS 완전 호환)
-  if (bgImg && !bgHidden && !transparent) {
+  if (bgImg && !bgHidden) {
     const totalBright = Math.round(_bright * _fBright / 100);
     const totalCont   = Math.round(_contrast * _fCont / 100);
     const totalSat    = Math.round(_sat * _fSat / 100);

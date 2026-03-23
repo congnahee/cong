@@ -1133,32 +1133,70 @@ function saveHistory() {
 }
 function applySnap(snap) {
   try {
-    bgColor = snap.bgColor; bgOffX = snap.bgOffX; bgOffY = snap.bgOffY; bgScale = snap.bgScale;
+    bgColor = snap.bgColor || '#FFFFFF';
+    bgOffX = snap.bgOffX || 0;
+    bgOffY = snap.bgOffY || 0;
+    bgScale = snap.bgScale || 100;
     if (snap.currentFilter !== undefined) currentFilter = snap.currentFilter;
-    if (snap._bright !== undefined) { _bright=snap._bright; _contrast=snap._contrast; _sat=snap._sat; _bgOp=snap._bgOp; _bgBlur=snap._bgBlur; _fBright=snap._fBright; _fCont=snap._fCont; _fSat=snap._fSat; _fTemp=snap._fTemp; _vig=snap._vig; _grain=snap._grain; }
-    layers = snap.layers; calliCache = {};
+    if (snap._bright !== undefined) {
+      _bright=snap._bright; _contrast=snap._contrast; _sat=snap._sat;
+      _bgOp=snap._bgOp; _bgBlur=snap._bgBlur;
+      _fBright=snap._fBright; _fCont=snap._fCont; _fSat=snap._fSat;
+      _fTemp=snap._fTemp; _vig=snap._vig; _grain=snap._grain;
+    }
+    layers = snap.layers || [];
+    calliCache = {};
     selId = null;
-    dataUrlToImg(snap.bgImgUrl, img => {
-      bgImg = img;
-      refreshLayerList(); renderProps(); render();
-    });
+
+    // 배경이미지 복원
+    if (snap.bgImgUrl) {
+      const img = new Image();
+      img.onload = () => {
+        bgImg = img;
+        currentBgDataUrl = snap.bgImgUrl;
+        restoreCalliCaches(() => {
+          refreshLayerList(); renderProps(); render();
+        });
+      };
+      img.onerror = () => {
+        bgImg = null;
+        restoreCalliCaches(() => {
+          refreshLayerList(); renderProps(); render();
+        });
+      };
+      img.src = snap.bgImgUrl;
+    } else {
+      bgImg = null;
+      currentBgDataUrl = null;
+      restoreCalliCaches(() => {
+        refreshLayerList(); renderProps(); render();
+      });
+    }
   } catch(e) { console.warn('applySnap 오류:', e.message); }
 }
 function undoCanvas() {
   if (undoStack.length === 0) { showToast('더 이상 되돌릴 수 없어요'); return; }
-  let _bgImgUrl1 = null; try { _bgImgUrl1 = imgToDataUrl(bgImg); } catch(e) { _bgImgUrl1 = currentBgDataUrl || null; }
-  const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: _bgImgUrl1, _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
-  redoStack.push(cur);
-  const snap = undoStack.pop();
-  applySnap(snap); showToast('되돌리기 ↩');
+  try {
+    let _bgImgUrl1 = currentBgDataUrl || null;
+    if (!_bgImgUrl1 && bgImg) { try { _bgImgUrl1 = imgToDataUrl(bgImg); } catch(e) {} }
+    const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: _bgImgUrl1, _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
+    redoStack.push(cur);
+    const snap = undoStack.pop();
+    applySnap(snap);
+    showToast('되돌리기 ↩');
+  } catch(e) { console.warn('undoCanvas 오류:', e.message); showToast('되돌리기 실패'); }
 }
 function redoCanvas() {
   if (redoStack.length === 0) { showToast('더 이상 앞으로 갈 수 없어요'); return; }
-  let _bgImgUrl2 = null; try { _bgImgUrl2 = imgToDataUrl(bgImg); } catch(e) { _bgImgUrl2 = currentBgDataUrl || null; }
-  const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: _bgImgUrl2, _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
-  undoStack.push(cur);
-  const snap = redoStack.pop();
-  applySnap(snap); showToast('앞으로가기 ↪');
+  try {
+    let _bgImgUrl2 = currentBgDataUrl || null;
+    if (!_bgImgUrl2 && bgImg) { try { _bgImgUrl2 = imgToDataUrl(bgImg); } catch(e) {} }
+    const cur = { bgColor, bgOffX, bgOffY, bgScale, currentFilter, bgImgUrl: _bgImgUrl2, _bright, _contrast, _sat, _bgOp, _bgBlur, _fBright, _fCont, _fSat, _fTemp, _vig, _grain, layers: JSON.parse(JSON.stringify(layers.map(l=>{const c={...l};delete c.srcImg;return c;}))) };
+    undoStack.push(cur);
+    const snap = redoStack.pop();
+    applySnap(snap);
+    showToast('앞으로가기 ↪');
+  } catch(e) { console.warn('redoCanvas 오류:', e.message); showToast('앞으로가기 실패'); }
 }
 
 const FILTERS = {
@@ -1906,6 +1944,7 @@ function clearBgPhoto() {
 }
 
 function applyBgPhoto(photo) {
+  saveHistory();
   bgImg = photo.imgObj;
   currentBgDataUrl = photo.dataUrl;
   activeBgPhotoId = photo.id;
@@ -2956,7 +2995,7 @@ function doResetAll() {
   bgImg=null; layers=[]; selId=null; idCtr=0;
   bgOffX=0; bgOffY=0; bgScale=100; bgMode='move';
   activeBgPhotoId=null; currentBgDataUrl=null; bgHidden=false;
-  bgPhotos=[];
+  // bgPhotos는 유지 (배경 갤러리 사진은 초기화해도 유지)
   currentFilter='none';
   bgColor='#FFFFFF';
   bgTextureStyle='';
@@ -3948,6 +3987,10 @@ function restoreCalliCaches(cb) {
     img.onload = () => {
       l.srcImg = img;
       processCalliLayer(l.id);
+      remaining--;
+      if (remaining === 0) cb();
+    };
+    img.onerror = () => {
       remaining--;
       if (remaining === 0) cb();
     };

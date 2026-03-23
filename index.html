@@ -1114,8 +1114,11 @@ function dataUrlToImg(url, cb) {
 }
 function saveHistory() {
   try {
-    let bgImgUrl = null;
-    try { bgImgUrl = imgToDataUrl(bgImg); } catch(e) { bgImgUrl = currentBgDataUrl || null; }
+    // currentBgDataUrl 우선 사용 (캔버스 오염 문제 우회)
+    let bgImgUrl = currentBgDataUrl || null;
+    if (!bgImgUrl && bgImg) {
+      try { bgImgUrl = imgToDataUrl(bgImg); } catch(e) {}
+    }
     const snap = {
       bgColor, bgOffX, bgOffY, bgScale, currentFilter,
       bgImgUrl,
@@ -3001,10 +3004,9 @@ function doResetAll() {
 }
 
 function resetAll() {
-  openConfirmModal('캔버스를 초기화할까요?', '배경·레이어가 모두 지워져요\n(갤러리 작품은 유지됩니다)', () => {
-    doResetAll();
-    showToast('초기화 완료');
-  });
+  if (!confirm('캔버스를 초기화할까요?\n배경·레이어가 모두 지워져요 (갤러리 작품은 유지됩니다)')) return;
+  doResetAll();
+  showToast('초기화 완료');
 }
 
 /* ════════════════════════════════════

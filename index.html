@@ -545,7 +545,7 @@ input[type=color]{width:25px;height:25px;border-radius:50%;border:2px solid var(
 @media(max-width:680px){
   :root{--panel:100%}
   .app{flex-direction:column;height:100vh;overflow:hidden}
-  .canvas-zone{flex:none;height:46vh;overflow:hidden;padding:6px 8px 4px;gap:4px;justify-content:center}
+  .canvas-zone{flex:none;height:55vh;overflow:hidden;padding:6px 8px 4px;gap:4px;justify-content:center}
   .canvas-shell{max-width:calc(100vw - 16px);overflow:hidden}
   .canvas-ctrl-bar{max-width:calc(100vw - 16px);padding:0 2px}
   .size-bar{gap:4px;max-width:calc(100vw - 16px);overflow-x:auto}
@@ -2291,6 +2291,7 @@ function duplicateLayer(id) {
   const idx = layers.findIndex(x => x.id === id);
   layers.splice(idx + 1, 0, copy);
   selId = copy.id;
+  if (copy.type === 'calli' && copy.srcImg) processCalliLayer(copy.id); // calliCache 등록
   saveHistory();
   refreshLayerList();
   renderProps();

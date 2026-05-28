@@ -117,7 +117,7 @@ header{
 .canvas-resize-handle.br{bottom:-6px;right:-6px;cursor:nwse-resize;}
 #mainCanvas{display:block;touch-action:none}
 @media(max-width:680px){
-  #mainCanvas{max-width:calc(100vw - 16px) !important;max-height:38vh !important;width:auto !important;height:auto !important}
+  #mainCanvas{max-width:calc(100vw - 16px) !important;max-height:min(calc(100vw - 16px), 70vh) !important;width:auto !important;height:auto !important}
 }
 
 /* 크롭 핸들 */

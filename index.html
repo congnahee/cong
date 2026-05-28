@@ -636,8 +636,7 @@ input[type=color]{width:25px;height:25px;border-radius:50%;border:2px solid var(
       <div class="size-chip" data-w="1080" data-h="1920" onclick="setSize(this)">▯ 9:16</div>
       <div class="size-chip" data-w="1920" data-h="1080" onclick="setSize(this)">▭ 16:9</div>
       <div class="size-chip" data-w="1080" data-h="1350" onclick="setSize(this)">▯ 4:5</div>
-      <div class="size-chip" data-w="1179" data-h="2556" onclick="setSize(this)">📱 아이폰</div>
-      <div class="size-chip" data-w="1080" data-h="2340" onclick="setSize(this)">📱 갤럭시</div>
+
       <div class="size-chip" onclick="enterCropMode()" style="border-color:#C4973A;color:#C4973A;flex-shrink:0">✂ 자르기</div>
       <div class="zoom-bar">
         <button class="zoom-btn" onclick="zoomCanvas(-1)" title="축소">－</button>
@@ -993,16 +992,7 @@ input[type=color]{width:25px;height:25px;border-radius:50%;border:2px solid var(
         <div class="sgrid-ratio">4:5</div>
         <div class="sgrid-px">1080 × 1350</div>
       </div>
-      <div class="sgrid-item" data-w="1179" data-h="2556" onclick="setModalSize(this)">
-        <div class="sgrid-icon">📱</div>
-        <div class="sgrid-ratio">아이폰</div>
-        <div class="sgrid-px">1179 × 2556</div>
-      </div>
-      <div class="sgrid-item" data-w="1080" data-h="2340" onclick="setModalSize(this)">
-        <div class="sgrid-icon">📱</div>
-        <div class="sgrid-ratio">갤럭시</div>
-        <div class="sgrid-px">1080 × 2340</div>
-      </div>
+
       <div class="sgrid-item" data-w="2000" data-h="2000" onclick="setModalSize(this)">
         <div class="sgrid-icon">■</div>
         <div class="sgrid-ratio">2K</div>
@@ -1914,6 +1904,7 @@ function drawCalli(c, W, H, l) {
   c.rotate(l.rotate*Math.PI/180);
   if (l.flipH) c.scale(-1,1);
   c.globalAlpha = l.opacity/100;
+  if (l.shadow) { c.shadowColor='rgba(0,0,0,0.5)'; c.shadowBlur=18*sc; c.shadowOffsetX=4*sc; c.shadowOffsetY=4*sc; }
   const dW = l.size*sc * ((l.scaleX||100)/100);
   const dH = l.size*sc * (cache.h/cache.w) * ((l.scaleY||100)/100);
   if (l.tintColor) {
@@ -2445,6 +2436,13 @@ function buildCalliProps(area, l) {
       <input type="color" id="pe_tintPicker" value="${l.tintColor||'#000000'}" style="width:28px;height:28px;border-radius:50%;border:2px solid var(--border);cursor:pointer;padding:1px;background:var(--parchment)" title="직접 선택">
     </div>
 
+    <div class="ctrl-row" style="margin-top:10px">
+      <span class="ctrl-n">그림자</span>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="pe_calli_shadow" ${l.shadow?'checked':''} style="width:16px;height:16px;cursor:pointer">
+        <span id="pe_calli_shadow_lbl" style="font-size:12px;color:var(--muted)">${l.shadow?'켜짐':'꺼짐'}</span>
+      </label>
+    </div>
     <div class="btnrow">
       <div class="togbtn" onclick="l_flipH()">↔ 좌우반전</div>
       <div class="togbtn" onclick="l_center()">⊕ 가운데</div>
@@ -2480,6 +2478,7 @@ function buildCalliProps(area, l) {
     render();
   });
   $('pe_tintPicker').addEventListener('change', ()=>saveHistory());
+  $('pe_calli_shadow').addEventListener('change', e=>{ l.shadow=e.target.checked; $('pe_calli_shadow_lbl').textContent=e.target.checked?'켜짐':'꺼짐'; saveHistory(); render(); });
 }
 
 function setLP(prop, val, el, rowId) {
@@ -2629,9 +2628,14 @@ function startDrag(e) {
   }
 
   // Layer drag
+  const W2 = mc.width, H2 = mc.height;
   for (let i=layers.length-1;i>=0;i--) {
     const l=layers[i];
-    if (Math.abs(fx-l.x)<.28 && Math.abs(fy-l.y)<.28) {
+    if (!l.visible) continue;
+    const b = getLayerBounds(l, W2, H2);
+    const hitW = b ? b.hw/W2 : 0.28;
+    const hitH = b ? b.hh/H2 : 0.28;
+    if (Math.abs(fx-l.x) < Math.max(hitW, 0.05) && Math.abs(fy-l.y) < Math.max(hitH, 0.05)) {
       const changed = selId !== l.id;
       selId=l.id; drag=true; dsx=fx; dsy=fy; dlx=l.x; dly=l.y;
       if (changed) { refreshLayerList(); renderProps(); }
